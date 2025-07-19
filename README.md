@@ -48,7 +48,6 @@
 
 ---
 
-## 🛠️ Tecnologías *Under the Hood*
 Hecho con ❤️ para la comunidad del circulo CERC (insanos)
 
 
