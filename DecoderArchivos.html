@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analizador de Archivos CTF</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a3e 100%);
+            color: #00ff00;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 0 30px rgba(0, 255, 0, 0.3);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #00ffff;
+            margin-bottom: 30px;
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        }
+        
+        .upload-zone {
+            border: 2px dashed #00ff00;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 30px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .upload-zone:hover {
+            background: rgba(0, 255, 0, 0.1);
+            border-color: #00ffff;
+        }
+        
+        .upload-zone.dragover {
+            background: rgba(0, 255, 0, 0.2);
+            border-color: #00ffff;
+        }
+        
+        input[type="file"] {
+            display: none;
+        }
+        
+        .analysis-section {
+            margin-bottom: 30px;
+        }
+        
+        .analysis-title {
+            color: #ffff00;
+            margin-bottom: 15px;
+            font-size: 18px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 5px;
+        }
+        
+        .analysis-content {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 20px;
+            border-radius: 5px;
+            border-left: 4px solid #00ff00;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .hex-view {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        
+        .hex-offset {
+            color: #888;
+        }
+        
+        .hex-bytes {
+            color: #00ffff;
+        }
+        
+        .hex-ascii {
+            color: #ffff00;
+        }
+        
+        .button {
+            background: linear-gradient(45deg, #00ff00, #00cc00);
+            color: #000;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 10px;
+            transition: all 0.3s ease;
+        }
+        
+        .button:hover {
+            background: linear-gradient(45deg, #00cc00, #009900);
+            transform: translateY(-2px);
+        }
+        
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid #333;
+            color: #ccc;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .tab.active {
+            background: rgba(0, 255, 0, 0.2);
+            color: #00ff00;
+            border-color: #00ff00;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .file-info {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        
+        .info-label {
+            color: #00ffff;
+            font-weight: bold;
+        }
+        
+        .info-value {
+            color: #ffff00;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Analizador de Archivos CTF</h1>
+        
+        <div class="upload-zone" id="uploadZone">
+            <p>📁 Arrastra tu archivo aquí o haz clic para seleccionar</p>
+            <input type="file" id="fileInput" accept="*/*">
+        </div>
+        
+        <div id="fileInfo" class="file-info" style="display: none;">
+            <div class="info-item">
+                <span class="info-label">Nombre:</span>
+                <span class="info-value" id="fileName"></span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Tamaño:</span>
+                <span class="info-value" id="fileSize"></span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Tipo:</span>
+                <span class="info-value" id="fileType"></span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Última modificación:</span>
+                <span class="info-value" id="fileDate"></span>
+            </div>
+        </div>
+        
+        <div class="tabs" id="tabs" style="display: none;">
+            <div class="tab active" data-tab="hex">Vista Hexadecimal</div>
+            <div class="tab" data-tab="strings">Strings</div>
+            <div class="tab" data-tab="analysis">Análisis</div>
+            <div class="tab" data-tab="entropy">Entropía</div>
+            <div class="tab" data-tab="advanced">Análisis Avanzado</div>
+            <div class="tab" data-tab="decoder">Decodificador</div>
+            <div class="tab" data-tab="steganography">Esteganografía</div>
+            <div class="tab" data-tab="forensics">Forense Profundo</div>
+        </div>
+        
+        <div id="hexTab" class="tab-content active">
+            <div class="analysis-section">
+                <div class="analysis-title">Vista Hexadecimal</div>
+                <div class="analysis-content hex-view" id="hexContent"></div>
+            </div>
+        </div>
+        
+        <div id="stringsTab" class="tab-content">
+            <div class="analysis-section">
+                <div class="analysis-title">Strings Encontrados</div>
+                <div class="analysis-content" id="stringsContent"></div>
+            </div>
+        </div>
+        
+        <div id="analysisTab" class="tab-content">
+            <div class="analysis-section">
+                <div class="analysis-title">Análisis del Archivo</div>
+                <div class="analysis-content" id="analysisContent"></div>
+            </div>
+        </div>
+        
+        <div id="entropyTab" class="tab-content">
+            <div class="analysis-section">
+                <div class="analysis-title">Análisis de Entropía</div>
+                <div class="analysis-content" id="entropyContent"></div>
+            </div>
+        </div>
+        
+        <div id="advancedTab" class="tab-content">
+            <div class="analysis-section">
+                <div class="analysis-title">Análisis Avanzado</div>
+                <div class="analysis-content" id="advancedContent"></div>
+            </div>
+        </div>
+        
+        <div id="decoderTab" class="tab-content">
+            <div class="analysis-section">
+                <div class="analysis-title">Decodificador Multi-formato</div>
+                <div class="analysis-content" id="decoderContent"></div>
+                <div style="margin-top: 20px;">
+                    <button class="button" onclick="tryAllDecodings()">🔓 Probar Todas las Decodificaciones</button>
+                    <button class="button" onclick="reverseAnalysis()">🔄 Análisis Inverso</button>
+                    <button class="button" onclick="xorAnalysis()">⚡ Análisis XOR</button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="steganographyTab" class="tab-content">
+            <div class="analysis-section">
+                <div class="analysis-title">Análisis de Esteganografía</div>
+                <div class="analysis-content" id="steganographyContent"></div>
+                <div style="margin-top: 20px;">
+                    <button class="button" onclick="lsbAnalysis()">🔍 Análisis LSB</button>
+                    <button class="button" onclick="bitPlaneAnalysis()">🎭 Planos de Bits</button>
+                    <button class="button" onclick="skipPatternAnalysis()">⏭️ Patrones de Salto</button>
+                    <button class="button" onclick="headerFooterAnalysis()">📄 Headers/Footers</button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="forensicsTab" class="tab-content">
+            <div class="analysis-section">
+                <div class="analysis-title">Análisis Forense Profundo</div>
+                <div class="analysis-content" id="forensicsContent"></div>
+                <div style="margin-top: 20px;">
+                    <button class="button" onclick="bruteForceAnalysis()">💪 Fuerza Bruta</button>
+                    <button class="button" onclick="statisticalAnalysis()">📊 Análisis Estadístico</button>
+                    <button class="button" onclick="customPatternSearch()">🔍 Búsqueda Personalizada</button>
+                    <button class="button" onclick="memoryDumpAnalysis()">💾 Análisis de Volcado</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentFile = null;
+        let fileData = null;
+        
+        // Configurar zona de subida
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+        
+        uploadZone.addEventListener('click', () => fileInput.click());
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        });
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('dragover');
+        });
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+        
+        // Configurar tabs
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.tab + 'Tab').classList.add('active');
+            });
+        });
+        
+        function handleFile(file) {
+            currentFile = file;
+            showFileInfo(file);
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                fileData = new Uint8Array(e.target.result);
+                analyzeFile();
+            };
+            reader.readAsArrayBuffer(file);
+        }
+        
+        function showFileInfo(file) {
+            document.getElementById('fileName').textContent = file.name;
+            document.getElementById('fileSize').textContent = formatBytes(file.size);
+            document.getElementById('fileType').textContent = file.type || 'Desconocido';
+            document.getElementById('fileDate').textContent = new Date(file.lastModified).toLocaleString();
+            document.getElementById('fileInfo').style.display = 'block';
+            document.getElementById('tabs').style.display = 'flex';
+        }
+        
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        function analyzeFile() {
+            generateHexView();
+            extractStrings();
+            performAnalysis();
+            calculateEntropy();
+            performAdvancedAnalysis();
+        }
+        
+        function generateHexView() {
+            const hexContent = document.getElementById('hexContent');
+            let hexString = '';
+            
+            for (let i = 0; i < Math.min(fileData.length, 2048); i += 16) {
+                const offset = i.toString(16).padStart(8, '0');
+                let hexLine = '';
+                let asciiLine = '';
+                
+                for (let j = 0; j < 16; j++) {
+                    if (i + j < fileData.length) {
+                        const byte = fileData[i + j];
+                        hexLine += byte.toString(16).padStart(2, '0') + ' ';
+                        asciiLine += (byte >= 32 && byte <= 126) ? String.fromCharCode(byte) : '.';
+                    } else {
+                        hexLine += '   ';
+                        asciiLine += ' ';
+                    }
+                }
+                
+                hexString += `<span class="hex-offset">${offset}</span>  <span class="hex-bytes">${hexLine}</span> <span class="hex-ascii">${asciiLine}</span>\n`;
+            }
+            
+            if (fileData.length > 2048) {
+                hexString += '\n... (mostrando solo los primeros 2048 bytes)';
+            }
+            
+            hexContent.innerHTML = hexString;
+        }
+        
+        function extractStrings() {
+            const stringsContent = document.getElementById('stringsContent');
+            const strings = [];
+            let currentString = '';
+            
+            for (let i = 0; i < fileData.length; i++) {
+                const byte = fileData[i];
+                if (byte >= 32 && byte <= 126) {
+                    currentString += String.fromCharCode(byte);
+                } else {
+                    if (currentString.length >= 4) {
+                        strings.push(currentString);
+                    }
+                    currentString = '';
+                }
+            }
+            
+            if (currentString.length >= 4) {
+                strings.push(currentString);
+            }
+            
+            stringsContent.textContent = strings.join('\n') || 'No se encontraron strings legibles';
+        }
+        
+        function performAnalysis() {
+            const analysisContent = document.getElementById('analysisContent');
+            let analysis = '';
+            
+            // Detectar tipo de archivo por magic bytes
+            const magicBytes = Array.from(fileData.slice(0, 16))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join(' ');
+            
+            analysis += `Magic Bytes: ${magicBytes}\n\n`;
+            
+            // Detectar tipo de archivo
+            if (fileData.length >= 4) {
+                const header = fileData.slice(0, 4);
+                if (header[0] === 0x7F && header[1] === 0x45 && header[2] === 0x4C && header[3] === 0x46) {
+                    analysis += 'Tipo detectado: Archivo ELF (Ejecutable Linux)\n';
+                } else if (header[0] === 0x4D && header[1] === 0x5A) {
+                    analysis += 'Tipo detectado: Archivo PE (Ejecutable Windows)\n';
+                } else if (header[0] === 0x50 && header[1] === 0x4B) {
+                    analysis += 'Tipo detectado: Archivo ZIP/JAR\n';
+                } else if (header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4E && header[3] === 0x47) {
+                    analysis += 'Tipo detectado: Imagen PNG\n';
+                } else {
+                    analysis += 'Tipo: Archivo desconocido o datos binarios\n';
+                }
+            }
+            
+            // Buscar patrones comunes
+            const dataStr = Array.from(fileData).map(b => String.fromCharCode(b)).join('');
+            
+            if (dataStr.includes('flag{') || dataStr.includes('CTF{')) {
+                analysis += '\n🚩 POSIBLE FLAG ENCONTRADA en el archivo!\n';
+            }
+            
+            if (dataStr.includes('base64') || /[A-Za-z0-9+/]{20,}={0,2}/.test(dataStr)) {
+                analysis += '\n🔍 Posible contenido codificado en Base64 detectado\n';
+            }
+            
+            if (dataStr.includes('-----BEGIN') || dataStr.includes('-----END')) {
+                analysis += '\n🔐 Posible contenido PEM/certificado detectado\n';
+            }
+            
+            analysisContent.textContent = analysis;
+        }
+        
+        function calculateEntropy() {
+            const entropyContent = document.getElementById('entropyContent');
+            const freq = new Array(256).fill(0);
+            
+            for (let i = 0; i < fileData.length; i++) {
+                freq[fileData[i]]++;
+            }
+            
+            let entropy = 0;
+            for (let i = 0; i < 256; i++) {
+                if (freq[i] > 0) {
+                    const p = freq[i] / fileData.length;
+                    entropy -= p * Math.log2(p);
+                }
+            }
+            
+            let entropyText = `Entropía: ${entropy.toFixed(4)} bits por byte\n\n`;
+            
+            if (entropy > 7.5) {
+                entropyText += '🔴 Alta entropía - Posible archivo encriptado o comprimido\n';
+            } else if (entropy > 6.0) {
+                entropyText += '🟡 Entropía media - Archivo con cierta aleatoriedad\n';
+            } else {
+                entropyText += '🟢 Baja entropía - Archivo con patrones regulares\n';
+            }
+            
+            entropyText += '\nInterpretación:\n';
+            entropyText += '- Entropía baja (0-4): Texto plano, datos estructurados\n';
+            entropyText += '- Entropía media (4-7): Código fuente, archivos binarios\n';
+            entropyText += '- Entropía alta (7-8): Archivos comprimidos o encriptados\n';
+            
+            entropyContent.textContent = entropyText;
+        }
+        
+        function performAdvancedAnalysis() {
+            const advancedContent = document.getElementById('advancedContent');
+            let analysis = '';
+            
+            // Buscar patrones ocultos
+            analysis += '🔍 BÚSQUEDA DE PATRONES OCULTOS:\n\n';
+            
+            // Buscar secuencias repetitivas
+            const repeatingPatterns = findRepeatingPatterns();
+            if (repeatingPatterns.length > 0) {
+                analysis += '📊 Patrones repetitivos encontrados:\n';
+                repeatingPatterns.forEach(pattern => {
+                    analysis += `  - "${pattern.pattern}" (${pattern.count} veces)\n`;
+                });
+                analysis += '\n';
+            }
+            
+            // Buscar offsets específicos
+            analysis += '📍 ANÁLISIS DE OFFSETS ESPECÍFICOS:\n';
+            const commonOffsets = [0x00, 0x10, 0x20, 0x40, 0x80, 0x100, 0x200, 0x400, 0x800];
+            commonOffsets.forEach(offset => {
+                if (offset < fileData.length) {
+                    const bytes = Array.from(fileData.slice(offset, offset + 8))
+                        .map(b => b.toString(16).padStart(2, '0'))
+                        .join(' ');
+                    analysis += `  Offset 0x${offset.toString(16).padStart(4, '0')}: ${bytes}\n`;
+                }
+            });
+            
+            // Buscar null bytes y padding
+            analysis += '\n🔍 ANÁLISIS DE ESTRUCTURA:\n';
+            const nullCount = Array.from(fileData).filter(b => b === 0).length;
+            analysis += `  - Null bytes: ${nullCount} (${(nullCount/fileData.length*100).toFixed(1)}%)\n`;
+            
+            // Buscar caracteres no imprimibles
+            const nonPrintable = Array.from(fileData).filter(b => b < 32 || b > 126).length;
+            analysis += `  - Caracteres no imprimibles: ${nonPrintable} (${(nonPrintable/fileData.length*100).toFixed(1)}%)\n`;
+            
+            // Análisis de frecuencia de bytes
+            analysis += '\n📈 BYTES MÁS FRECUENTES:\n';
+            const byteFreq = new Array(256).fill(0);
+            for (let i = 0; i < fileData.length; i++) {
+                byteFreq[fileData[i]]++;
+            }
+            
+            const topBytes = byteFreq.map((count, byte) => ({byte, count}))
+                .sort((a, b) => b.count - a.count)
+                .slice(0, 10)
+                .filter(item => item.count > 0);
+            
+            topBytes.forEach(item => {
+                const char = (item.byte >= 32 && item.byte <= 126) ? String.fromCharCode(item.byte) : '.';
+                analysis += `  - 0x${item.byte.toString(16).padStart(2, '0')} ('${char}'): ${item.count} veces\n`;
+            });
+            
+            // Buscar posibles flags codificadas
+            analysis += '\n🚩 BÚSQUEDA DE FLAGS CODIFICADAS:\n';
+            const possibleFlags = searchEncodedFlags();
+            if (possibleFlags.length > 0) {
+                possibleFlags.forEach(flag => {
+                    analysis += `  🎯 POSIBLE FLAG: ${flag}\n`;
+                });
+            } else {
+                analysis += '  - No se encontraron flags evidentes\n';
+            }
+            
+            advancedContent.textContent = analysis;
+        }
+        
+        function findRepeatingPatterns() {
+            const patterns = [];
+            const dataStr = Array.from(fileData).map(b => String.fromCharCode(b)).join('');
+            
+            // Buscar patrones de 4-20 caracteres
+            for (let len = 4; len <= 20; len++) {
+                const seen = new Map();
+                for (let i = 0; i <= dataStr.length - len; i++) {
+                    const pattern = dataStr.substring(i, i + len);
+                    if (seen.has(pattern)) {
+                        seen.set(pattern, seen.get(pattern) + 1);
+                    } else {
+                        seen.set(pattern, 1);
+                    }
+                }
+                
+                for (const [pattern, count] of seen) {
+                    if (count >= 3 && /[a-zA-Z0-9]/.test(pattern)) {
+                        patterns.push({pattern, count});
+                    }
+                }
+            }
+            
+            return patterns.sort((a, b) => b.count - a.count).slice(0, 10);
+        }
+        
+        function searchEncodedFlags() {
+            const flags = [];
+            const dataStr = Array.from(fileData).map(b => String.fromCharCode(b)).join('');
+            
+            // Buscar Base64 que pueda contener flags
+            const base64Regex = /[A-Za-z0-9+/]{20,}={0,2}/g;
+            const base64Matches = dataStr.match(base64Regex) || [];
+            
+            base64Matches.forEach(match => {
+                try {
+                    const decoded = atob(match);
+                    if (decoded.includes('flag') || decoded.includes('CTF') || decoded.includes('{')) {
+                        flags.push(`Base64: ${match} -> ${decoded}`);
+                    }
+                } catch (e) {
+                    // No es Base64 válido
+                }
+            });
+            
+            // Buscar ROT13/Caesar
+            const alphabet = 'abcdefghijklmnopqrstuvwxyz';
+            for (let shift = 1; shift < 26; shift++) {
+                const shifted = dataStr.toLowerCase().replace(/[a-z]/g, char => {
+                    const index = alphabet.indexOf(char);
+                    return alphabet[(index + shift) % 26];
+                });
+                if (shifted.includes('flag{') || shifted.includes('ctf{')) {
+                    flags.push(`ROT${shift}: ${shifted.substring(shifted.indexOf('flag{') || shifted.indexOf('ctf{'), shifted.indexOf('flag{') + 50 || shifted.indexOf('ctf{') + 50)}`);
+                }
+            }
+            
+            return flags;
+        }
+        
+        function tryAllDecodings() {
+            const decoderContent = document.getElementById('decoderContent');
+            let results = '🔓 INTENTANDO TODAS LAS DECODIFICACIONES:\n\n';
+            
+            const dataStr = Array.from(fileData).map(b => String.fromCharCode(b)).join('');
+            const hexStr = Array.from(fileData).map(b => b.toString(16).padStart(2, '0')).join('');
+            
+            // Base64
+            try {
+                const base64Decoded = atob(dataStr);
+                results += `📋 Base64: ${base64Decoded.substring(0, 100)}${base64Decoded.length > 100 ? '...' : ''}\n\n`;
+            } catch (e) {
+                results += '📋 Base64: No válido\n\n';
+            }
+            
+            // Hex to ASCII
+            try {
+                let hexDecoded = '';
+                for (let i = 0; i < hexStr.length; i += 2) {
+                    const hex = hexStr.substring(i, i + 2);
+                    hexDecoded += String.fromCharCode(parseInt(hex, 16));
+                }
+                results += `🔢 Hex to ASCII: ${hexDecoded.substring(0, 100)}${hexDecoded.length > 100 ? '...' : ''}\n\n`;
+            } catch (e) {
+                results += '🔢 Hex to ASCII: Error\n\n';
+            }
+            
+            // ROT13
+            const rot13 = dataStr.replace(/[a-zA-Z]/g, char => {
+                const start = char <= 'Z' ? 65 : 97;
+                return String.fromCharCode(((char.charCodeAt(0) - start + 13) % 26) + start);
+            });
+            results += `🔄 ROT13: ${rot13.substring(0, 100)}${rot13.length > 100 ? '...' : ''}\n\n`;
+            
+            // Reverse
+            const reversed = dataStr.split('').reverse().join('');
+            results += `↩️ Reverse: ${reversed.substring(0, 100)}${reversed.length > 100 ? '...' : ''}\n\n`;
+            
+            // URL decode
+            try {
+                const urlDecoded = decodeURIComponent(dataStr);
+                results += `🌐 URL Decode: ${urlDecoded.substring(0, 100)}${urlDecoded.length > 100 ? '...' : ''}\n\n`;
+            } catch (e) {
+                results += '🌐 URL Decode: No válido\n\n';
+            }
+            
+            decoderContent.textContent = results;
+        }
+        
+        // === FUNCIONES DE ESTEGANOGRAFÍA ===
+        
+        function lsbAnalysis() {
+            const steganographyContent = document.getElementById('steganographyContent');
+            let results = '🔍 ANÁLISIS LSB (Least Significant Bit):\n\n';
+            
+            // Extraer LSB de cada byte
+            const lsbBits = Array.from(fileData).map(b => b & 1);
+            const lsbBytes = [];
+            
+            for (let i = 0; i < lsbBits.length; i += 8) {
+                let byte = 0;
+                for (let j = 0; j < 8 && i + j < lsbBits.length; j++) {
+                    byte |= lsbBits[i + j] << (7 - j);
+                }
+                lsbBytes.push(byte);
+            }
+            
+            const lsbString = lsbBytes.map(b => String.fromCharCode(b)).join('');
+            results += `📄 LSB como texto: ${lsbString.substring(0, 200)}${lsbString.length > 200 ? '...' : ''}\n\n`;
+            
+            // Buscar flags en LSB
+            if (lsbString.includes('flag{') || lsbString.includes('CTF{') || lsbString.includes('flag') || lsbString.includes('ctf')) {
+                results += '🚩 ¡POSIBLE FLAG ENCONTRADA EN LSB!\n';
+                const flagStart = lsbString.indexOf('flag{') !== -1 ? lsbString.indexOf('flag{') : lsbString.indexOf('CTF{');
+                if (flagStart !== -1) {
+                    results += `🎯 FLAG: ${lsbString.substring(flagStart, flagStart + 50)}\n`;
+                }
+            }
+            
+            // Analizar entropía de LSB
+            const lsbEntropy = calculateBitEntropy(lsbBits);
+            results += `📊 Entropía LSB: ${lsbEntropy.toFixed(4)}\n`;
+            results += lsbEntropy > 0.9 ? '🔴 Alta entropía - Posible data oculta\n' : '🟢 Baja entropía - Probablemente natural\n';
+            
+            steganographyContent.textContent = results;
+        }
+        
+        function bitPlaneAnalysis() {
+            const steganographyContent = document.getElementById('steganographyContent');
+            let results = '🎭 ANÁLISIS DE PLANOS DE BITS:\n\n';
+            
+            for (let bitPlane = 0; bitPlane < 8; bitPlane++) {
+                const planeBits = Array.from(fileData).map(b => (b >> bitPlane) & 1);
+                const planeBytes = [];
+                
+                for (let i = 0; i < planeBits.length; i += 8) {
+                    let byte = 0;
+                    for (let j = 0; j < 8 && i + j < planeBits.length; j++) {
+                        byte |= planeBits[i + j] << (7 - j);
+                    }
+                    planeBytes.push(byte);
+                }
+                
+                const planeString = planeBytes.map(b => String.fromCharCode(b)).join('');
+                const entropy = calculateBitEntropy(planeBits);
+                
+                results += `🔢 Bit plane ${bitPlane}:\n`;
+                results += `   Entropía: ${entropy.toFixed(4)}\n`;
+                results += `   Texto: ${planeString.substring(0, 100)}${planeString.length > 100 ? '...' : ''}\n`;
+                
+                if (planeString.includes('flag{') || planeString.includes('CTF{') || planeString.includes('flag') || planeString.includes('ctf')) {
+                    results += '   🚩 ¡POSIBLE FLAG ENCONTRADA!\n';
+                }
+                results += '\n';
+            }
+            
+            steganographyContent.textContent = results;
+        }
+        
+        function skipPatternAnalysis() {
+            const steganographyContent = document.getElementById('steganographyContent');
+            let results = '⏭️ ANÁLISIS DE PATRONES DE SALTO:\n\n';
+            
+            // Probar diferentes patrones de salto
+            const skipPatterns = [2, 3, 4, 5, 8, 16, 32, 64, 128, 256];
+            
+            skipPatterns.forEach(skip => {
+                const skippedBytes = [];
+                for (let i = 0; i < fileData.length; i += skip) {
+                    skippedBytes.push(fileData[i]);
+                }
+                
+                const skippedString = skippedBytes.map(b => String.fromCharCode(b)).join('');
+                results += `🔢 Salto cada ${skip} bytes:\n`;
+                results += `   ${skippedString.substring(0, 100)}${skippedString.length > 100 ? '...' : ''}\n`;
+                
+                if (skippedString.includes('flag{') || skippedString.includes('CTF{') || skippedString.includes('flag') || skippedString.includes('ctf')) {
+                    results += '   🚩 ¡POSIBLE FLAG ENCONTRADA!\n';
+                }
+                results += '\n';
+            });
+            
+            steganographyContent.textContent = results;
+        }
+        
+        function headerFooterAnalysis() {
+            const steganographyContent = document.getElementById('steganographyContent');
+            let results = '📄 ANÁLISIS DE HEADERS Y FOOTERS:\n\n';
+            
+            // Buscar headers de archivos conocidos
+            const fileHeaders = {
+                'PNG': [0x89, 0x50, 0x4E, 0x47],
+                'JPEG': [0xFF, 0xD8, 0xFF],
+                'GIF': [0x47, 0x49, 0x46],
+                'PDF': [0x25, 0x50, 0x44, 0x46],
+                'ZIP': [0x50, 0x4B, 0x03, 0x04],
+                'RAR': [0x52, 0x61, 0x72, 0x21],
+                'ELF': [0x7F, 0x45, 0x4C, 0x46],
+                'PE': [0x4D, 0x5A]
+            };
+            
+            results += '🔍 Buscando headers de archivos incrustados:\n';
+            
+            for (const [format, header] of Object.entries(fileHeaders)) {
+                for (let i = 0; i <= fileData.length - header.length; i++) {
+                    let match = true;
+                    for (let j = 0; j < header.length; j++) {
+                        if (fileData[i + j] !== header[j]) {
+                            match = false;
+                            break;
+                        }
+                    }
+                    if (match) {
+                        results += `   🎯 ${format} header encontrado en offset 0x${i.toString(16).padStart(8, '0')}\n`;
+                        
+                        // Intentar extraer el archivo
+                        const extractedData = fileData.slice(i, Math.min(i + 1000, fileData.length));
+                        const extractedString = Array.from(extractedData).map(b => String.fromCharCode(b)).join('');
+                        
+                        if (extractedString.includes('flag{') || extractedString.includes('CTF{')) {
+                            results += `      🚩 ¡FLAG ENCONTRADA EN ARCHIVO INCRUSTADO!\n`;
+                        }
+                    }
+                }
+            }
+            
+            // Buscar al final del archivo
+            results += '\n📋 Análisis del final del archivo:\n';
+            const tail = fileData.slice(-200);
+            const tailString = Array.from(tail).map(b => String.fromCharCode(b)).join('');
+            results += `   ${tailString}\n`;
+            
+            steganographyContent.textContent = results;
+        }
+        
+        function calculateBitEntropy(bits) {
+            const ones = bits.filter(b => b === 1).length;
+            const zeros = bits.length - ones;
+            
+            if (ones === 0 || zeros === 0) return 0;
+            
+            const p1 = ones / bits.length;
+            const p0 = zeros / bits.length;
+            
+            return -(p1 * Math.log2(p1) + p0 * Math.log2(p0));
+        }
+        
+        // === FUNCIONES DE ANÁLISIS FORENSE PROFUNDO ===
+        
+        function bruteForceAnalysis() {
+            const forensicsContent = document.getElementById('forensicsContent');
+            let results = '💪 ANÁLISIS DE FUERZA BRUTA:\n\n';
+            
+            // Fuerza bruta XOR con todas las claves de 1 byte
+            results += '🔓 Fuerza bruta XOR (1 byte):\n';
+            for (let key = 0; key < 256; key++) {
+                const xored = Array.from(fileData.slice(0, 100)).map(b => b ^ key);
+                const xoredString = xored.map(b => String.fromCharCode(b)).join('');
+                
+                if (xoredString.includes('flag{') || xoredString.includes('CTF{') || 
+                    xoredString.includes('flag') || xoredString.includes('ctf')) {
+                    results += `   🎯 XOR key 0x${key.toString(16).padStart(2, '0')}: ${xoredString}\n`;
+                }
+            }
+            
+            // Fuerza bruta Caesar cipher
+            results += '\n🔄 Fuerza bruta Caesar cipher:\n';
+            const dataString = Array.from(fileData).map(b => String.fromCharCode(b)).join('');
+            
+            for (let shift = 1; shift < 26; shift++) {
+                const shifted = dataString.replace(/[a-zA-Z]/g, char => {
+                    const base = char >= 'A' && char <= 'Z' ? 65 : 97;
+                    return String.fromCharCode(((char.charCodeAt(0) - base + shift) % 26) + base);
+                });
+                
+                if (shifted.includes('flag{') || shifted.includes('CTF{') || 
+                    shifted.includes('flag') || shifted.includes('ctf')) {
+                    results += `   🎯 Caesar shift ${shift}: ${shifted.substring(0, 100)}\n`;
+                }
+            }
+            
+            // Fuerza bruta con operaciones bit a bit
+            results += '\n⚡ Fuerza bruta operaciones bit:\n';
+            const operations = [
+                {name: 'NOT', op: b => ~b & 0xFF},
+                {name: 'ROL', op: b => ((b << 1) | (b >> 7)) & 0xFF},
+                {name: 'ROR', op: b => ((b >> 1) | (b << 7)) & 0xFF},
+                {name: 'ADD 1', op: b => (b + 1) & 0xFF},
+                {name: 'SUB 1', op: b => (b - 1) & 0xFF}
+            ];
+            
+            operations.forEach(({name, op}) => {
+                const transformed = Array.from(fileData.slice(0, 100)).map(op);
+                const transformedString = transformed.map(b => String.fromCharCode(b)).join('');
+                
+                if (transformedString.includes('flag{') || transformedString.includes('CTF{') || 
+                    transformedString.includes('flag') || transformedString.includes('ctf')) {
+                    results += `   🎯 ${name}: ${transformedString}\n`;
+                }
+            });
+            
+            forensicsContent.textContent = results;
+        }
+        
+        function statisticalAnalysis() {
+            const forensicsContent = document.getElementById('forensicsContent');
+            let results = '📊 ANÁLISIS ESTADÍSTICO PROFUNDO:\n\n';
+            
+            // Análisis de correlación
+            results += '🔗 Análisis de correlación entre bytes:\n';
+            const correlations = [];
+            
+            for (let lag = 1; lag <= 10; lag++) {
+                let correlation = 0;
+                let count = 0;
+                
+                for (let i = 0; i < fileData.length - lag; i++) {
+                    correlation += fileData[i] * fileData[i + lag];
+                    count++;
+                }
+                
+                correlation /= count;
+                correlations.push({lag, correlation});
+                
+                if (correlation > 50000) {
+                    results += `   🔴 Alta correlación en lag ${lag}: ${correlation.toFixed(2)}\n`;
+                }
+            }
+            
+            // Análisis de periodicidad
+            results += '\n🔄 Análisis de periodicidad:\n';
+            const periods = [8, 16, 32, 64, 128, 256];
+            
+            periods.forEach(period => {
+                let similarity = 0;
+                let count = 0;
+                
+                for (let i = 0; i < fileData.length - period; i++) {
+                    if (fileData[i] === fileData[i + period]) {
+                        similarity++;
+                    }
+                    count++;
+                }
+                
+                const similarityRatio = similarity / count;
+                results += `   Período ${period}: ${(similarityRatio * 100).toFixed(2)}% similitud\n`;
+                
+                if (similarityRatio > 0.7) {
+                    results += `   🎯 Posible patrón periódico detectado!\n`;
+                }
+            });
+            
+            // Análisis de distribución de bytes
+            results += '\n📈 Distribución de bytes:\n';
+            const distribution = new Array(256).fill(0);
+            fileData.forEach(b => distribution[b]++);
+            
+            const expectedFreq = fileData.length / 256;
+            let chiSquared = 0;
+            
+            distribution.forEach(freq => {
+                chiSquared += Math.pow(freq - expectedFreq, 2) / expectedFreq;
+            });
+            
+            results += `   Chi-squared: ${chiSquared.toFixed(2)}\n`;
+            results += chiSquared > 300 ? '   🔴 Distribución no uniforme - Posible cifrado\n' : '   🟢 Distribución relativamente uniforme\n';
+            
+            forensicsContent.textContent = results;
+        }
+        
+        function customPatternSearch() {
+            const forensicsContent = document.getElementById('forensicsContent');
+            let results = '🔍 BÚSQUEDA DE PATRONES PERSONALIZADOS:\n\n';
+            
+            const dataString = Array.from(fileData).map(b => String.fromCharCode(b)).join('');
+            
+            // Patrones comunes de CTF
+            const patterns = [
+                /[A-Za-z0-9+/]{40,}={0,2}/g,  // Base64
+                /[0-9a-fA-F]{32,}/g,           // MD5/SHA hashes
+                /[0-9a-fA-F]{40,}/g,           // SHA1 hashes
+                /[0-9a-fA-F]{64,}/g,           // SHA256 hashes
+                /\b[A-Z]{2,}\{[^}]+\}/g,       // CTF flags format
+                /https?:\/\/[^\s]+/g,          // URLs
+                /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g, // IP addresses
+                /-----BEGIN [A-Z ]+-----/g,    // PEM headers
+                /\$[0-9a-z]+\$[^$]+\$/g,       // Password hashes
+                /[a-zA-Z0-9]{20,}/g            // Long alphanumeric strings
+            ];
+            
+            const patternNames = [
+                'Base64', 'MD5/SHA hash', 'SHA1 hash', 'SHA256 hash', 
+                'CTF flags', 'URLs', 'IP addresses', 'PEM headers', 
+                'Password hashes', 'Long strings'
+            ];
+            
+            patterns.forEach((pattern, index) => {
+                const matches = dataString.match(pattern);
+                if (matches) {
+                    results += `🎯 ${patternNames[index]} encontrado:\n`;
+                    matches.slice(0, 5).forEach(match => {
+                        results += `   ${match.substring(0, 100)}${match.length > 100 ? '...' : ''}\n`;
+                    });
+                    results += '\n';
+                }
+            });
+            
+            // Búsqueda de secuencias binarias específicas
+            results += '🔢 Secuencias binarias específicas:\n';
+            const binaryPatterns = [
+                [0xDE, 0xAD, 0xBE, 0xEF],  // DEADBEEF
+                [0xCA, 0xFE, 0xBA, 0xBE],  // CAFEBABE
+                [0x00, 0x00, 0x00, 0x00],  // NULL padding
+                [0xFF, 0xFF, 0xFF, 0xFF],  // All ones
+                [0x90, 0x90, 0x90, 0x90]   // NOP sled
+            ];
+            
+            const binaryNames = ['DEADBEEF', 'CAFEBABE', 'NULL padding', 'All ones', 'NOP sled'];
+            
+            binaryPatterns.forEach((pattern, index) => {
+                for (let i = 0; i <= fileData.length - pattern.length; i++) {
+                    let match = true;
+                    for (let j = 0; j < pattern.length; j++) {
+                        if (fileData[i + j] !== pattern[j]) {
+                            match = false;
+                            break;
+                        }
+                    }
+                    if (match) {
+                        results += `   🎯 ${binaryNames[index]} encontrado en offset 0x${i.toString(16).padStart(8, '0')}\n`;
+                    }
+                }
+            });
+            
+            forensicsContent.textContent = results;
+        }
+        
+        function memoryDumpAnalysis() {
+            const forensicsContent = document.getElementById('forensicsContent');
+            let results = '💾 ANÁLISIS DE VOLCADO DE MEMORIA:\n\n';
+            
+            // Buscar direcciones de memoria
+            results += '🎯 Posibles direcciones de memoria:\n';
+            for (let i = 0; i < fileData.length - 4; i++) {
+                const addr = (fileData[i] << 24) | (fileData[i+1] << 16) | (fileData[i+2] << 8) | fileData[i+3];
+                
+                // Buscar direcciones que parezcan válidas (heap/stack)
+                if ((addr >= 0x08000000 && addr <= 0x08FFFFFF) || // Heap típico
+                    (addr >= 0x7F000000 && addr <= 0x7FFFFFFF) || // Stack típico
+                    (addr >= 0x40000000 && addr <= 0x4FFFFFFF)) { // Shared libraries
+                    results += `   0x${addr.toString(16).padStart(8, '0')} en offset 0x${i.toString(16).padStart(8, '0')}\n`;
+                }
+            }
+            
+            // Buscar strings de funciones comunes
+            results += '\n🔍 Funciones/símbolos comunes:\n';
+            const commonSymbols = ['main', 'printf', 'scanf', 'malloc', 'free', 'strlen', 'strcmp', 'strcpy', 'gets', 'puts'];
+            const dataString = Array.from(fileData).map(b => String.fromCharCode(b)).join('');
+            
+            commonSymbols.forEach(symbol => {
+                const index = dataString.indexOf(symbol);
+                if (index !== -1) {
+                    results += `   "${symbol}" encontrado en offset 0x${index.toString(16).padStart(8, '0')}\n`;
+                }
+            });
+            
+            // Buscar shellcode común
+            results += '\n🐚 Posible shellcode:\n';
+            const shellcodePatterns = [
+                [0x31, 0xC0],           // xor eax, eax
+                [0x31, 0xDB],           // xor ebx, ebx
+                [0x31, 0xC9],           // xor ecx, ecx
+                [0x31, 0xD2],           // xor edx, edx
+                [0xCD, 0x80],           // int 0x80
+                [0x89, 0xE5],           // mov ebp, esp
+                [0x5D, 0xC3],           // pop ebp; ret
+                [0x90, 0x90, 0x90]      // NOP sled
+            ];
+            
+            shellcodePatterns.forEach((pattern, index) => {
+                for (let i = 0; i <= fileData.length - pattern.length; i++) {
+                    let match = true;
+                    for (let j = 0; j < pattern.length; j++) {
+                        if (fileData[i + j] !== pattern[j]) {
+                            match = false;
+                            break;
+                        }
+                    }
+                    if (match) {
+                        results += `   Patrón ${index + 1} encontrado en offset 0x${i.toString(16).padStart(8, '0')}\n`;
+                    }
+                }
+            });
+            
+            forensicsContent.textContent = results;
+        }
+        
+        function reverseAnalysis() {
+            const decoderContent = document.getElementById('decoderContent');
+            let results = '🔄 ANÁLISIS INVERSO:\n\n';
+            
+            // Invertir el archivo completamente
+            const reversed = new Uint8Array(fileData.length);
+            for (let i = 0; i < fileData.length; i++) {
+                reversed[i] = fileData[fileData.length - 1 - i];
+            }
+            
+            const reversedStr = Array.from(reversed).map(b => String.fromCharCode(b)).join('');
+            results += `📄 Archivo invertido (primeros 200 chars):\n${reversedStr.substring(0, 200)}\n\n`;
+            
+            // Buscar strings en el archivo invertido
+            const reversedStrings = [];
+            let currentString = '';
+            
+            for (let i = 0; i < reversed.length; i++) {
+                const byte = reversed[i];
+                if (byte >= 32 && byte <= 126) {
+                    currentString += String.fromCharCode(byte);
+                } else {
+                    if (currentString.length >= 4) {
+                        reversedStrings.push(currentString);
+                    }
+                    currentString = '';
+                }
+            }
+            
+            results += `🔍 Strings en archivo invertido:\n${reversedStrings.slice(0, 20).join('\n')}\n`;
+            
+            decoderContent.textContent = results;
+        }
+        
+        function xorAnalysis() {
+            const decoderContent = document.getElementById('decoderContent');
+            let results = '⚡ ANÁLISIS XOR:\n\n';
+            
+            // Probar XOR con claves comunes
+            const commonKeys = [0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0xFF, 0xAA, 0x55, 0x42];
+            
+            commonKeys.forEach(key => {
+                const xored = Array.from(fileData).map(b => b ^ key);
+                const xoredStr = xored.map(b => String.fromCharCode(b)).join('');
+                
+                if (xoredStr.includes('flag{') || xoredStr.includes('CTF{') || xoredStr.includes('flag') || xoredStr.includes('ctf')) {
+                    results += `🎯 XOR con 0x${key.toString(16).padStart(2, '0')}: POSIBLE FLAG ENCONTRADA!\n`;
+                    results += `${xoredStr.substring(0, 200)}\n\n`;
+                } else {
+                    results += `XOR con 0x${key.toString(16).padStart(2, '0')}: ${xoredStr.substring(0, 50)}...\n`;
+                }
+            });
+            
+            // Análisis XOR con longitud de clave variable
+            results += '\n🔍 XOR con claves multi-byte:\n';
+            const keyLengths = [2, 3, 4, 5, 8];
+            
+            keyLengths.forEach(keyLen => {
+                // Intentar encontrar la clave por análisis de frecuencia
+                for (let keyByte = 0; keyByte < 256; keyByte += 32) {
+                    const key = Array(keyLen).fill(keyByte);
+                    const xored = Array.from(fileData.slice(0, Math.min(200, fileData.length)))
+                        .map((b, i) => b ^ key[i % keyLen]);
+                    const xoredStr = xored.map(b => String.fromCharCode(b)).join('');
+                    
+                    if (xoredStr.includes('flag') || xoredStr.includes('ctf')) {
+                        results += `🎯 XOR keylen=${keyLen}, key=0x${keyByte.toString(16)}: ${xoredStr.substring(0, 100)}\n`;
+                    }
+                }
+            });
+            
+            decoderContent.textContent = results;
+        }
+    </script>
+</body>
+</html>
